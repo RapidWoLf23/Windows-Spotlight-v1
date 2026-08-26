@@ -1,4 +1,4 @@
-from winotify import Notification
+from winotify import Notification, audio
 
 
 def send_notification(title, message):
@@ -9,5 +9,9 @@ def send_notification(title, message):
         msg=message
     )
 
+    notification.set_audio(
+        audio.Default,
+        loop=False
+    )
+
     notification.show()
-    
