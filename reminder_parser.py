@@ -13,13 +13,16 @@ WEEKDAYS = {
 }
 
 
-def get_next_weekday(current_date, target_weekday):
+def get_next_weekday(current_date, target_weekday, force_next=False):
 
     days_ahead = (
         target_weekday - current_date.weekday()
     ) % 7
 
-    if days_ahead == 0:
+    if days_ahead == 0 and force_next:
+        days_ahead = 7
+
+    elif days_ahead == 0:
         days_ahead = 7
 
     return current_date + timedelta(
@@ -29,8 +32,17 @@ def get_next_weekday(current_date, target_weekday):
 
 def parse_time(command):
 
+    # Examples:
+    # 8 pm
+    # 8:30 pm
+    # at 8 pm
+    # at 8:30 pm
+
     time_match = re.search(
-        r"\b(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
+        r"\b(?:at\s*)?"
+        r"(\d{1,2})"
+        r"(?::(\d{2}))?"
+        r"\s*(am|pm)\b",
         command,
         re.IGNORECASE
     )
@@ -50,13 +62,21 @@ def parse_time(command):
             .lower()
         )
 
+        if hour < 1 or hour > 12:
+            return 9, 0
+
+        if minute < 0 or minute > 59:
+            return 9, 0
+
         if period == "pm" and hour != 12:
             hour += 12
 
-        if period == "am" and hour == 12:
+        elif period == "am" and hour == 12:
             hour = 0
 
         return hour, minute
+
+    # Day parts
 
     if "morning" in command:
         return 9, 0
@@ -70,90 +90,261 @@ def parse_time(command):
     if "night" in command:
         return 21, 0
 
+    # Default reminder time
     return 9, 0
+
+
+def parse_relative_time(command):
+
+    match = re.search(
+        r"\bin\s+(\d+)\s+"
+        r"(minute|minutes|hour|hours)\b",
+        command
+    )
+
+    if not match:
+        return None
+
+    amount = int(
+        match.group(1)
+    )
+
+    unit = match.group(2)
+
+    if "minute" in unit:
+
+        return datetime.now() + timedelta(
+            minutes=amount
+        )
+
+    return datetime.now() + timedelta(
+        hours=amount
+    )
+
+
+def parse_date(command, now):
+
+    # Tomorrow
+
+    if "tomorrow" in command:
+
+        return now + timedelta(
+            days=1
+        )
+
+    # Today
+
+    if "today" in command:
+
+        return now
+
+    # Weekdays
+
+    for day_name, weekday_number in WEEKDAYS.items():
+
+        if day_name not in command:
+            continue
+
+        # "next Tuesday"
+        if f"next {day_name}" in command:
+
+            return get_next_weekday(
+                now,
+                weekday_number,
+                force_next=True
+            )
+
+        # "this Tuesday"
+        if f"this {day_name}" in command:
+
+            days_ahead = (
+                weekday_number - now.weekday()
+            ) % 7
+
+            return now + timedelta(
+                days=days_ahead
+            )
+
+        # Just "Tuesday"
+        return get_next_weekday(
+            now,
+            weekday_number
+        )
+
+    # No date specified
+    return now
+
+
+def clean_task(command):
+
+    task = command
+
+    # Remove reminder phrases
+
+    task = re.sub(
+        r"\bremind me\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    task = re.sub(
+        r"\breminder\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    task = re.sub(
+        r"\bremember\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    # Remove relative time
+
+    task = re.sub(
+        r"\bin\s+\d+\s+"
+        r"(minute|minutes|hour|hours)\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    # Remove dates
+
+    task = re.sub(
+        r"\btomorrow\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    task = re.sub(
+        r"\btoday\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    task = re.sub(
+        r"\bnext\s+"
+        r"(monday|tuesday|wednesday|thursday|"
+        r"friday|saturday|sunday)\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    task = re.sub(
+        r"\bthis\s+"
+        r"(monday|tuesday|wednesday|thursday|"
+        r"friday|saturday|sunday)\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    task = re.sub(
+        r"\b(monday|tuesday|wednesday|thursday|"
+        r"friday|saturday|sunday)\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    # Remove clock times
+
+    task = re.sub(
+        r"\b(?:at\s*)?"
+        r"\d{1,2}(?::\d{2})?"
+        r"\s*(?:am|pm)\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    # Remove day parts
+
+    task = re.sub(
+        r"\b(morning|afternoon|evening|night)\b",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    # Remove common connector words at the beginning
+
+    task = re.sub(
+        r"^\s*(to|for|about)\s+",
+        "",
+        task,
+        flags=re.IGNORECASE
+    )
+
+    # Clean extra spaces
+
+    task = re.sub(
+        r"\s+",
+        " ",
+        task
+    )
+
+    # Remove punctuation left at the edges
+
+    task = task.strip(
+        " ,.-"
+    )
+
+    return task
 
 
 def parse_reminder(command):
 
-    command = command.lower().strip()
+    command = command.strip()
+
+    if not command:
+        return None
+
+    command_lower = command.lower()
 
     now = datetime.now()
 
     # --------------------------------
-    # Relative time
+    # Relative reminders
     # --------------------------------
 
-    relative_match = re.search(
-        r"\bin\s+(\d+)\s+(minute|minutes|hour|hours)\b",
-        command
+    relative_time = parse_relative_time(
+        command_lower
     )
 
-    if relative_match:
+    if relative_time is not None:
 
-        amount = int(
-            relative_match.group(1)
+        task = clean_task(
+            command
         )
-
-        unit = relative_match.group(2)
-
-        if "minute" in unit:
-
-            reminder_time = (
-                now + timedelta(
-                    minutes=amount
-                )
-            )
-
-        else:
-
-            reminder_time = (
-                now + timedelta(
-                    hours=amount
-                )
-            )
-
-        task = clean_task(command)
 
         return {
             "task": task,
-            "reminder_time": reminder_time
+            "reminder_time": relative_time
         }
 
     # --------------------------------
     # Date
     # --------------------------------
 
-    reminder_date = now
-
-    if "tomorrow" in command:
-
-        reminder_date = (
-            now + timedelta(days=1)
-        )
-
-    elif "today" in command:
-
-        reminder_date = now
-
-    else:
-
-        for day_name, weekday_number in WEEKDAYS.items():
-
-            if day_name in command:
-
-                reminder_date = get_next_weekday(
-                    now,
-                    weekday_number
-                )
-
-                break
+    reminder_date = parse_date(
+        command_lower,
+        now
+    )
 
     # --------------------------------
     # Time
     # --------------------------------
 
     hour, minute = parse_time(
-        command
+        command_lower
     )
 
     reminder_time = reminder_date.replace(
@@ -167,88 +358,11 @@ def parse_reminder(command):
     # Task
     # --------------------------------
 
-    task = clean_task(command)
+    task = clean_task(
+        command
+    )
 
     return {
         "task": task,
         "reminder_time": reminder_time
     }
-
-
-def clean_task(command):
-
-    task = command
-
-    task = re.sub(
-        r"\bremind me\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\bremember\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\btoday\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\btomorrow\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\bnext\s+"
-        r"(monday|tuesday|wednesday|thursday|"
-        r"friday|saturday|sunday)\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\b(monday|tuesday|wednesday|thursday|"
-        r"friday|saturday|sunday)\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\bin\s+\d+\s+"
-        r"(minute|minutes|hour|hours)\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\b(?:at\s*)?"
-        r"\d{1,2}(?::\d{2})?\s*"
-        r"(?:am|pm)\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\b(morning|afternoon|evening|night)\b",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"^\s*to\s+",
-        "",
-        task
-    )
-
-    task = re.sub(
-        r"\s+",
-        " ",
-        task
-    )
-
-    return task.strip()

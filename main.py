@@ -65,9 +65,9 @@ class Spotlight(QWidget):
             layout
         )
 
-        # -----------------------------
+        # --------------------------------
         # Reminder scheduler
-        # -----------------------------
+        # --------------------------------
 
         self.scheduler_timer = QTimer()
 
@@ -75,7 +75,6 @@ class Spotlight(QWidget):
             check_reminders
         )
 
-        # Check every second
         self.scheduler_timer.start(
             1000
         )
@@ -91,11 +90,25 @@ class Spotlight(QWidget):
             command
         )
 
+        if reminder is None:
+            self.result.setText(
+                "Please enter a reminder."
+            )
+            return
+
         task = reminder["task"]
 
         reminder_time = reminder[
             "reminder_time"
         ]
+
+        if not task:
+
+            self.result.setText(
+                "I couldn't understand the task."
+            )
+
+            return
 
         reminder_id = add_reminder(
             task,
@@ -118,23 +131,22 @@ class Spotlight(QWidget):
             f"🔔 Reminder saved!\n\n"
             f"Task: {task}\n"
             f"Date: {formatted_date}\n"
-            f"Time: {formatted_time}\n"
-            f"ID: {reminder_id}"
+            f"Time: {formatted_time}"
         )
 
         self.search_box.clear()
 
 
-# -----------------------------
-# Initialize database
-# -----------------------------
+# --------------------------------
+# Database
+# --------------------------------
 
 create_database()
 
 
-# -----------------------------
-# Start application
-# -----------------------------
+# --------------------------------
+# Application
+# --------------------------------
 
 app = QApplication(sys.argv)
 
