@@ -15,6 +15,10 @@ from database import (
     add_reminder
 )
 
+from text_normalizer import (
+    normalize_text
+)
+
 from reminder_parser import (
     parse_reminder
 )
@@ -81,19 +85,35 @@ class Spotlight(QWidget):
 
     def process_command(self):
 
-        command = self.search_box.text().strip()
+        original_command = (
+            self.search_box.text().strip()
+        )
 
-        if not command:
+        if not original_command:
             return
+
+        # --------------------------------
+        # Normalize human shortcuts
+        # --------------------------------
+
+        command = normalize_text(
+            original_command
+        )
+
+        # --------------------------------
+        # Parse reminder
+        # --------------------------------
 
         reminder = parse_reminder(
             command
         )
 
         if reminder is None:
+
             self.result.setText(
-                "Please enter a reminder."
+                "I couldn't understand that reminder."
             )
+
             return
 
         task = reminder["task"]
@@ -110,7 +130,11 @@ class Spotlight(QWidget):
 
             return
 
-        reminder_id = add_reminder(
+        # --------------------------------
+        # Save reminder
+        # --------------------------------
+
+        add_reminder(
             task,
             reminder_time.isoformat()
         )
@@ -138,14 +162,14 @@ class Spotlight(QWidget):
 
 
 # --------------------------------
-# Database
+# Initialize database
 # --------------------------------
 
 create_database()
 
 
 # --------------------------------
-# Application
+# Start application
 # --------------------------------
 
 app = QApplication(sys.argv)
