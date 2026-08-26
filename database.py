@@ -5,14 +5,19 @@ from datetime import datetime
 DATABASE_NAME = "reminders.db"
 
 
-def create_database():
-
-    connection = sqlite3.connect(
+def get_connection():
+    return sqlite3.connect(
         DATABASE_NAME
     )
 
+
+def create_database():
+
+    connection = get_connection()
+
     cursor = connection.cursor()
 
+    # Create the reminders table if it doesn't exist
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reminders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,15 +28,40 @@ def create_database():
         )
     """)
 
+    # Check existing columns
+    cursor.execute(
+        "PRAGMA table_info(reminders)"
+    )
+
+    columns = [
+        column[1]
+        for column in cursor.fetchall()
+    ]
+
+    # Add created_at to older databases
+    if "created_at" not in columns:
+
+        cursor.execute("""
+            ALTER TABLE reminders
+            ADD COLUMN created_at TEXT
+        """)
+
+        cursor.execute("""
+            UPDATE reminders
+            SET created_at = ?
+            WHERE created_at IS NULL
+        """, (
+            datetime.now().isoformat(),
+        ))
+
     connection.commit()
+
     connection.close()
 
 
 def add_reminder(task, reminder_time):
 
-    connection = sqlite3.connect(
-        DATABASE_NAME
-    )
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -65,9 +95,7 @@ def add_reminder(task, reminder_time):
 
 def get_reminders():
 
-    connection = sqlite3.connect(
-        DATABASE_NAME
-    )
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -91,9 +119,7 @@ def get_reminders():
 
 def get_pending_reminders():
 
-    connection = sqlite3.connect(
-        DATABASE_NAME
-    )
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -116,9 +142,7 @@ def get_pending_reminders():
 
 def mark_completed(reminder_id):
 
-    connection = sqlite3.connect(
-        DATABASE_NAME
-    )
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -132,14 +156,13 @@ def mark_completed(reminder_id):
     )
 
     connection.commit()
+
     connection.close()
 
 
 def delete_reminder(reminder_id):
 
-    connection = sqlite3.connect(
-        DATABASE_NAME
-    )
+    connection = get_connection()
 
     cursor = connection.cursor()
 
@@ -152,4 +175,5 @@ def delete_reminder(reminder_id):
     )
 
     connection.commit()
+
     connection.close()
