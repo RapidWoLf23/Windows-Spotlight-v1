@@ -23,6 +23,10 @@ from reminder_parser import (
     parse_reminder
 )
 
+from ai_parser import (
+    ai_parse_reminder
+)
+
 from scheduler import (
     check_reminders
 )
@@ -93,7 +97,7 @@ class Spotlight(QWidget):
             return
 
         # --------------------------------
-        # Normalize human shortcuts
+        # Step 1: Normalize human language
         # --------------------------------
 
         command = normalize_text(
@@ -101,12 +105,26 @@ class Spotlight(QWidget):
         )
 
         # --------------------------------
-        # Parse reminder
+        # Step 2: Try normal parser
         # --------------------------------
 
         reminder = parse_reminder(
             command
         )
+
+        # --------------------------------
+        # Step 3: AI fallback
+        # --------------------------------
+
+        if reminder is None:
+
+            reminder = ai_parse_reminder(
+                command
+            )
+
+        # --------------------------------
+        # Still not understood
+        # --------------------------------
 
         if reminder is None:
 
@@ -116,16 +134,22 @@ class Spotlight(QWidget):
 
             return
 
-        task = reminder["task"]
+        # --------------------------------
+        # Get reminder information
+        # --------------------------------
 
-        reminder_time = reminder[
+        task = reminder.get(
+            "task"
+        )
+
+        reminder_time = reminder.get(
             "reminder_time"
-        ]
+        )
 
-        if not task:
+        if not task or not reminder_time:
 
             self.result.setText(
-                "I couldn't understand the task."
+                "I couldn't understand the reminder."
             )
 
             return
