@@ -1,8 +1,24 @@
-#include <iostream>
+#include <QApplication>
+#include <QLineEdit>
+#include <QVBoxLayout>
+#include <QWidget>
 
-int main()
+int main(int argc, char *argv[])
 {
-    std::cout << "Windows Spotlight C++ version" << std::endl;
+    QApplication app(argc, argv);
 
-    return 0;
+    QWidget window;
+    window.setWindowTitle("Windows Spotlight");
+    window.resize(600, 120);
+
+    QVBoxLayout *layout = new QVBoxLayout(&window);
+
+    QLineEdit *input = new QLineEdit();
+    input->setPlaceholderText("What do you want to do?");
+
+    layout->addWidget(input);
+
+    window.show();
+
+    return app.exec();
 }
