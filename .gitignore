@@ -1,5 +1,8 @@
 # CMake build files
 cpp/build/
 
-# VS Code
+# VS Code local settings
 .vscode/
+
+# macOS
+.DS_Store
