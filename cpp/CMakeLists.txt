@@ -9,12 +9,12 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 qt_standard_project_setup()
 
-qt_add_executable(
-    WindowsSpotlight
+qt_add_executable(WindowsSpotlight
     src/main.cpp
+    src/MainWindow.cpp
+    src/MainWindow.h
 )
 
-target_link_libraries(
-    WindowsSpotlight
-    PRIVATE Qt6::Widgets
+target_link_libraries(WindowsSpotlight PRIVATE
+    Qt6::Widgets
 )
