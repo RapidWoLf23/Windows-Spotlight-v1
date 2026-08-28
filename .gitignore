@@ -1,7 +1,5 @@
-venv/
-.venv/
-__pycache__/
-*.pyc
-reminders.db
-# hi my name is ayush 
-# Collaborator test.DS_Store
+# CMake build files
+cpp/build/
+
+# VS Code
+.vscode/

@@ -1,5 +1,0 @@
-C:/Users/ayush/OneDrive/Documents/project/WindowsSpotlight/cpp/build/CMakeFiles/WindowsSpotlight.dir
-C:/Users/ayush/OneDrive/Documents/project/WindowsSpotlight/cpp/build/CMakeFiles/edit_cache.dir
-C:/Users/ayush/OneDrive/Documents/project/WindowsSpotlight/cpp/build/CMakeFiles/rebuild_cache.dir
-C:/Users/ayush/OneDrive/Documents/project/WindowsSpotlight/cpp/build/CMakeFiles/WindowsSpotlight_autogen_timestamp_deps.dir
-C:/Users/ayush/OneDrive/Documents/project/WindowsSpotlight/cpp/build/CMakeFiles/WindowsSpotlight_autogen.dir

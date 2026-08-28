@@ -1,3 +1,0 @@
-# Hashes of file build rules.
-79cb14445a349691aa309d65ee66d21c CMakeFiles/WindowsSpotlight_autogen
-5bea2b0509f683e3b55906d08c8fa062 WindowsSpotlight_autogen/timestamp
