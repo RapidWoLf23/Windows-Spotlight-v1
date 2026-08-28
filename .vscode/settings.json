@@ -1,4 +1,8 @@
 {
+<<<<<<< Updated upstream
   "python-envs.defaultEnvManager": "ms-python.python:system",
   "cmake.sourceDirectory": "C:/Users/ayush/OneDrive/Documents/project/WindowsSpotlight/cpp"
+=======
+  "python-envs.defaultEnvManager": "ms-python.python:system"
+>>>>>>> Stashed changes
 }
