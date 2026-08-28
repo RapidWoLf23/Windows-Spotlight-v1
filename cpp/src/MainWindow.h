@@ -2,10 +2,14 @@
 
 #include <QMainWindow>
 #include <QPoint>
+#include <QRect>
 
 class QLineEdit;
-class QLabel;
 class QListWidget;
+class QPropertyAnimation;
+class QMouseEvent;
+class QKeyEvent;
+class QString;
 
 class MainWindow : public QMainWindow
 {
@@ -20,11 +24,23 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
 
-private:
-    QLineEdit *searchBox;
-    QLabel *emptyLabel;
-    QListWidget *resultsList;
+private slots:
+    void handleSearchTextChanged(const QString &text);
 
-    bool dragging = false;
+private:
+    void updateWindowSize(int resultCount);
+    void animateToGeometry(const QRect &target);
+
+    QLineEdit *searchBox;
+    QListWidget *resultsList;
+    QPropertyAnimation *geometryAnimation;
+
+    QRect compactGeometry;
+
+    int windowWidth;
+    int searchHeight;
+    int resultRowHeight;
+
+    bool dragging;
     QPoint dragOffset;
 };
