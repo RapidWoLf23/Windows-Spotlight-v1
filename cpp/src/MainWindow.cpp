@@ -19,12 +19,20 @@
 #include <QEasingCurve>
 #include <QSizePolicy>
 #include <QIcon>
+#include <QFrame>
+#include <QAbstractItemView>
+
+#include <algorithm>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <shellapi.h>
 #endif
 
+
+// =========================================================
+// CONSTRUCTOR
+// =========================================================
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -217,6 +225,50 @@ MainWindow::MainWindow(QWidget *parent)
 
     layout->addWidget(
         resultsList
+    );
+
+
+    // =========================================================
+    // CLICK RESULT = LAUNCH
+    // =========================================================
+
+    connect(
+        resultsList,
+        &QListWidget::itemClicked,
+        this,
+        [this](QListWidgetItem *item)
+        {
+            if (!item)
+            {
+                return;
+            }
+
+            resultsList->setCurrentItem(item);
+
+            launchSelectedResult();
+        }
+    );
+
+
+    // =========================================================
+    // DOUBLE CLICK RESULT = LAUNCH
+    // =========================================================
+
+    connect(
+        resultsList,
+        &QListWidget::itemDoubleClicked,
+        this,
+        [this](QListWidgetItem *item)
+        {
+            if (!item)
+            {
+                return;
+            }
+
+            resultsList->setCurrentItem(item);
+
+            launchSelectedResult();
+        }
     );
 
 
@@ -622,11 +674,8 @@ void MainWindow::searchApplications(
         trimmed.toLower();
 
 
-    QVector<AppResult> matches;
-
-
     // ---------------------------------------------------------
-    // SCORE ALL APPLICATIONS
+    // SCORED RESULT
     // ---------------------------------------------------------
 
     struct ScoredResult
@@ -638,6 +687,10 @@ void MainWindow::searchApplications(
 
     QVector<ScoredResult> scored;
 
+
+    // ---------------------------------------------------------
+    // SCORE ALL APPLICATIONS
+    // ---------------------------------------------------------
 
     for (const AppResult &app :
          applications)
@@ -776,11 +829,19 @@ int MainWindow::calculateScore(
         app.searchName;
 
 
+    // ---------------------------------------------------------
+    // EXACT MATCH
+    // ---------------------------------------------------------
+
     if (name == query)
     {
         return 10000;
     }
 
+
+    // ---------------------------------------------------------
+    // STARTS WITH
+    // ---------------------------------------------------------
 
     if (name.startsWith(query))
     {
@@ -1081,9 +1142,6 @@ void MainWindow::animateWindowHeight(
     heightAnimation->stop();
 
 
-    // Keep the window centered vertically
-    // while its height changes.
-
     const int heightDifference =
         targetHeight -
         current.height();
@@ -1168,8 +1226,15 @@ void MainWindow::launchApplication(
 {
 #ifdef Q_OS_WIN
 
+    if (path.isEmpty())
+    {
+        return;
+    }
+
+
     const std::wstring widePath =
-        path.toStdWString();
+        QDir::toNativeSeparators(path)
+            .toStdWString();
 
 
     const HINSTANCE result =
@@ -1183,8 +1248,8 @@ void MainWindow::launchApplication(
         );
 
 
-    // Only close Spotlight if Windows
-    // successfully launched the target.
+    // Windows returns a value greater
+    // than 32 when ShellExecute succeeds.
 
     if (
         reinterpret_cast<INT_PTR>(
@@ -1335,6 +1400,7 @@ void MainWindow::keyPressEvent(
     )
     {
         if (
+            resultsList &&
             resultsList->isVisible() &&
             resultsList->count() > 0
         )
@@ -1353,7 +1419,6 @@ void MainWindow::keyPressEvent(
                 );
             }
 
-
             return;
         }
     }
@@ -1369,6 +1434,7 @@ void MainWindow::keyPressEvent(
     )
     {
         if (
+            resultsList &&
             resultsList->isVisible() &&
             resultsList->count() > 0
         )
@@ -1383,7 +1449,6 @@ void MainWindow::keyPressEvent(
                     row - 1
                 );
             }
-
 
             return;
         }
@@ -1402,6 +1467,7 @@ void MainWindow::keyPressEvent(
     )
     {
         if (
+            resultsList &&
             resultsList->isVisible() &&
             resultsList->count() > 0
         )
