@@ -2,21 +2,33 @@
 
 #include <QMainWindow>
 #include <QPoint>
-#include <QRect>
+#include <QString>
+#include <QStringList>
+#include <QVector>
 
 class QLineEdit;
+class QLabel;
 class QListWidget;
+class QListWidgetItem;
 class QPropertyAnimation;
-class QMouseEvent;
+class QTimer;
 class QKeyEvent;
-class QString;
+class QMouseEvent;
 
-class MainWindow : public QMainWindow
+struct AppResult
+{
+    QString name;
+    QString path;
+    QString searchName;
+};
+
+class MainWindow final : public QMainWindow
 {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override = default;
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -25,22 +37,50 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
 
 private slots:
-    void handleSearchTextChanged(const QString &text);
+    void onSearchTextChanged(const QString &text);
+    void launchSelectedResult();
+    void continueIndexing();
 
 private:
-    void updateWindowSize(int resultCount);
-    void animateToGeometry(const QRect &target);
+    // Indexing
+    void startIndexing();
+    void indexDirectory(const QString &directoryPath);
 
-    QLineEdit *searchBox;
-    QListWidget *resultsList;
-    QPropertyAnimation *geometryAnimation;
+    // Search
+    void searchApplications(const QString &query);
+    int calculateScore(
+        const AppResult &app,
+        const QString &query
+    ) const;
 
-    QRect compactGeometry;
+    // UI
+    void addApplicationResult(const AppResult &app);
+    void clearResults();
+    void updateWindowHeight(int resultCount);
+    void animateWindowHeight(int targetHeight);
 
-    int windowWidth;
-    int searchHeight;
-    int resultRowHeight;
+    // Launch
+    void launchApplication(const QString &path);
 
-    bool dragging;
+    // Widgets
+    QLineEdit *searchBox = nullptr;
+    QLabel *emptyLabel = nullptr;
+    QListWidget *resultsList = nullptr;
+    QPropertyAnimation *heightAnimation = nullptr;
+    QTimer *indexTimer = nullptr;
+
+    // Application data
+    QVector<AppResult> applications;
+
+    // Indexing data
+    QStringList indexDirectories;
+    int currentIndexDirectory = 0;
+
+    // Dragging
+    bool dragging = false;
     QPoint dragOffset;
+
+    // Window
+    int compactHeight = 108;
+    int maximumResults = 8;
 };

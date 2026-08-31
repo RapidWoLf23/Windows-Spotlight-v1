@@ -1,28 +1,33 @@
 #include "MainWindow.h"
 
 #include <QApplication>
+#include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
+#include <QFileIconProvider>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QListWidgetItem>
 #include <QMouseEvent>
 #include <QPropertyAnimation>
-#include <QEasingCurve>
 #include <QScreen>
-#include <QSizePolicy>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
-#include <QFrame>
+#include <QEasingCurve>
+#include <QSizePolicy>
+#include <QIcon>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent),
-      searchBox(nullptr),
-      resultsList(nullptr),
-      geometryAnimation(nullptr),
-      windowWidth(620),
-      searchHeight(56),
-      resultRowHeight(48),
-      dragging(false)
+    : QMainWindow(parent)
 {
     // =========================================================
     // WINDOW
@@ -30,39 +35,38 @@ MainWindow::MainWindow(QWidget *parent)
 
     setWindowFlags(
         Qt::FramelessWindowHint |
-        Qt::WindowStaysOnTopHint
+        Qt::WindowStaysOnTopHint |
+        Qt::Tool
     );
 
-    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(
+        Qt::WA_TranslucentBackground
+    );
 
-    /*
-     * IMPORTANT:
-     *
-     * We do NOT use setFixedSize().
-     *
-     * The width stays fixed, but the height is allowed
-     * to animate.
-     */
-    setMinimumWidth(windowWidth);
-    setMaximumWidth(windowWidth);
+    setFixedWidth(720);
 
-    setMinimumHeight(84);
-    setMaximumHeight(500);
+    resize(
+        720,
+        compactHeight
+    );
 
 
     // =========================================================
-    // CONTAINER
+    // MAIN CONTAINER
     // =========================================================
 
-    QWidget *container = new QWidget(this);
+    QWidget *container =
+        new QWidget(this);
 
-    container->setObjectName("container");
+    container->setObjectName(
+        "container"
+    );
 
     container->setStyleSheet(
         "#container {"
-        "    background: rgba(248, 248, 252, 245);"
+        "    background: rgba(248, 248, 252, 248);"
         "    border: 1px solid rgba(180, 180, 190, 100);"
-        "    border-radius: 20px;"
+        "    border-radius: 22px;"
         "}"
     );
 
@@ -75,14 +79,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     QVBoxLayout *layout =
         new QVBoxLayout(container);
-
-    /*
-     * This is critical.
-     *
-     * Everything starts at the TOP.
-     * Nothing is vertically centered.
-     */
-    layout->setAlignment(Qt::AlignTop);
 
     layout->setContentsMargins(
         14,
@@ -102,10 +98,10 @@ MainWindow::MainWindow(QWidget *parent)
         new QLineEdit(container);
 
     searchBox->setPlaceholderText(
-        "Search reminders..."
+        "Search apps..."
     );
 
-    searchBox->setFixedHeight(searchHeight);
+    searchBox->setMinimumHeight(58);
 
     searchBox->setSizePolicy(
         QSizePolicy::Expanding,
@@ -114,22 +110,52 @@ MainWindow::MainWindow(QWidget *parent)
 
     searchBox->setStyleSheet(
         "QLineEdit {"
-        "    background: rgba(232, 232, 240, 245);"
-        "    border: 1px solid rgba(170, 170, 185, 90);"
-        "    border-radius: 15px;"
-        "    padding-left: 18px;"
-        "    padding-right: 18px;"
-        "    font-size: 19px;"
+        "    background: rgba(235, 235, 242, 245);"
+        "    border: none;"
+        "    border-radius: 16px;"
+        "    padding: 0 20px;"
+        "    font-size: 20px;"
         "    color: #202124;"
+        "    selection-background-color: #cfd0dc;"
         "}"
         ""
         "QLineEdit:focus {"
-        "    background: rgba(226, 226, 236, 255);"
-        "    border: 1px solid rgba(140, 140, 160, 130);"
+        "    background: rgba(228, 228, 238, 255);"
         "}"
     );
 
-    layout->addWidget(searchBox);
+    layout->addWidget(
+        searchBox
+    );
+
+
+    // =========================================================
+    // EMPTY LABEL
+    // =========================================================
+
+    emptyLabel =
+        new QLabel(container);
+
+    emptyLabel->setVisible(false);
+
+    emptyLabel->setAlignment(
+        Qt::AlignCenter
+    );
+
+    emptyLabel->setMinimumHeight(40);
+
+    emptyLabel->setStyleSheet(
+        "QLabel {"
+        "    color: #777780;"
+        "    font-size: 16px;"
+        "    background: transparent;"
+        "    border: none;"
+        "}"
+    );
+
+    layout->addWidget(
+        emptyLabel
+    );
 
 
     // =========================================================
@@ -141,19 +167,26 @@ MainWindow::MainWindow(QWidget *parent)
 
     resultsList->setVisible(false);
 
-    resultsList->setFrameShape(QFrame::NoFrame);
+    resultsList->setSpacing(4);
 
-    resultsList->setHorizontalScrollBarPolicy(
-        Qt::ScrollBarAlwaysOff
+    resultsList->setFrameShape(
+        QFrame::NoFrame
     );
 
     resultsList->setVerticalScrollBarPolicy(
         Qt::ScrollBarAlwaysOff
     );
 
-    resultsList->setSizePolicy(
-        QSizePolicy::Expanding,
-        QSizePolicy::Fixed
+    resultsList->setHorizontalScrollBarPolicy(
+        Qt::ScrollBarAlwaysOff
+    );
+
+    resultsList->setSelectionMode(
+        QAbstractItemView::SingleSelection
+    );
+
+    resultsList->setFocusPolicy(
+        Qt::NoFocus
     );
 
     resultsList->setStyleSheet(
@@ -161,60 +194,108 @@ MainWindow::MainWindow(QWidget *parent)
         "    background: transparent;"
         "    border: none;"
         "    outline: none;"
-        "    padding: 0px;"
-        "    margin: 0px;"
+        "    font-size: 17px;"
         "}"
         ""
         "QListWidget::item {"
-        "    background: rgba(235, 235, 242, 190);"
-        "    border-radius: 12px;"
-        "    padding-left: 16px;"
-        "    padding-right: 16px;"
-        "    margin: 2px 0px;"
+        "    background: rgba(235, 235, 242, 150);"
+        "    border-radius: 14px;"
+        "    padding: 8px 14px;"
+        "    margin: 1px 0;"
         "    color: #202124;"
-        "    font-size: 16px;"
+        "}"
+        ""
+        "QListWidget::item:hover {"
+        "    background: rgba(225, 225, 235, 210);"
         "}"
         ""
         "QListWidget::item:selected {"
-        "    background: rgba(215, 215, 225, 230);"
+        "    background: rgba(210, 211, 225, 245);"
+        "    color: #202124;"
         "}"
     );
 
-    layout->addWidget(resultsList);
+    layout->addWidget(
+        resultsList
+    );
 
 
     // =========================================================
-    // ANIMATION
+    // HEIGHT ANIMATION
     // =========================================================
 
-    geometryAnimation =
+    heightAnimation =
         new QPropertyAnimation(
             this,
-            "geometry",
-            this
+            "geometry"
         );
 
-    geometryAnimation->setDuration(220);
+    heightAnimation->setDuration(
+        180
+    );
 
-    geometryAnimation->setEasingCurve(
+    heightAnimation->setEasingCurve(
         QEasingCurve::OutCubic
     );
 
 
     // =========================================================
-    // SEARCH CONNECTION
+    // SEARCH SIGNAL
     // =========================================================
 
     connect(
         searchBox,
         &QLineEdit::textChanged,
         this,
-        &MainWindow::handleSearchTextChanged
+        &MainWindow::onSearchTextChanged
     );
 
 
     // =========================================================
-    // INITIAL POSITION
+    // ENTER = LAUNCH
+    // =========================================================
+
+    connect(
+        searchBox,
+        &QLineEdit::returnPressed,
+        this,
+        &MainWindow::launchSelectedResult
+    );
+
+
+    // =========================================================
+    // INDEX TIMER
+    // =========================================================
+
+    indexTimer =
+        new QTimer(this);
+
+    indexTimer->setSingleShot(true);
+
+    connect(
+        indexTimer,
+        &QTimer::timeout,
+        this,
+        &MainWindow::continueIndexing
+    );
+
+
+    // =========================================================
+    // START INDEXING
+    // =========================================================
+
+    startIndexing();
+
+
+    // =========================================================
+    // FOCUS
+    // =========================================================
+
+    searchBox->setFocus();
+
+
+    // =========================================================
+    // CENTER WINDOW
     // =========================================================
 
     QScreen *screen =
@@ -222,256 +303,909 @@ MainWindow::MainWindow(QWidget *parent)
 
     if (screen)
     {
-        QRect available =
+        const QRect available =
             screen->availableGeometry();
 
-        int x =
+        move(
             available.center().x()
-            - windowWidth / 2;
+                - width() / 2,
 
-        /*
-         * This Y coordinate becomes the permanent TOP
-         * anchor of the Spotlight window.
-         */
-        int y =
-            available.center().y() - 180;
-
-        compactGeometry =
-            QRect(
-                x,
-                y,
-                windowWidth,
-                84
-            );
-
-        setGeometry(compactGeometry);
+            available.center().y()
+                - height() / 2
+        );
     }
-
-
-    // =========================================================
-    // INITIAL FOCUS
-    // =========================================================
-
-    searchBox->setFocus();
 }
 
 
-// =============================================================
-// SEARCH
-// =============================================================
+// =========================================================
+// START INDEXING
+// =========================================================
 
-void MainWindow::handleSearchTextChanged(
+void MainWindow::startIndexing()
+{
+#ifdef Q_OS_WIN
+
+    applications.clear();
+
+    indexDirectories.clear();
+
+    currentIndexDirectory = 0;
+
+
+    // ---------------------------------------------------------
+    // USER START MENU
+    // ---------------------------------------------------------
+
+    const QString userStartMenu =
+        QDir::homePath()
+        + "/AppData/Roaming/Microsoft/Windows/Start Menu/Programs";
+
+
+    // ---------------------------------------------------------
+    // ALL USERS START MENU
+    // ---------------------------------------------------------
+
+    const QString allUsersStartMenu =
+        "C:/ProgramData/Microsoft/Windows/Start Menu/Programs";
+
+
+    if (QDir(userStartMenu).exists())
+    {
+        indexDirectories.append(
+            userStartMenu
+        );
+    }
+
+    if (QDir(allUsersStartMenu).exists())
+    {
+        indexDirectories.append(
+            allUsersStartMenu
+        );
+    }
+
+
+    // ---------------------------------------------------------
+    // INDEX ASYNCHRONOUSLY
+    // ---------------------------------------------------------
+
+    if (!indexDirectories.isEmpty())
+    {
+        indexTimer->start(0);
+    }
+
+#endif
+}
+
+
+// =========================================================
+// INDEX DIRECTORY
+// =========================================================
+
+void MainWindow::indexDirectory(
+    const QString &directoryPath
+)
+{
+#ifdef Q_OS_WIN
+
+    QDir directory(
+        directoryPath
+    );
+
+    if (!directory.exists())
+    {
+        return;
+    }
+
+
+    QDirIterator iterator(
+        directoryPath,
+        QStringList()
+            << "*.lnk"
+            << "*.url",
+        QDir::Files,
+        QDirIterator::Subdirectories
+    );
+
+
+    while (iterator.hasNext())
+    {
+        const QString path =
+            iterator.next();
+
+        const QFileInfo info(path);
+
+        if (!info.exists() ||
+            !info.isFile())
+        {
+            continue;
+        }
+
+
+        QString name =
+            info.completeBaseName()
+                .trimmed();
+
+        if (name.isEmpty())
+        {
+            continue;
+        }
+
+
+        AppResult result;
+
+        result.name = name;
+
+        result.path = path;
+
+        result.searchName =
+            name.toLower();
+
+
+        applications.append(
+            result
+        );
+    }
+
+#endif
+}
+
+
+// =========================================================
+// CONTINUE INDEXING
+// =========================================================
+
+void MainWindow::continueIndexing()
+{
+    if (currentIndexDirectory <
+        indexDirectories.size())
+    {
+        indexDirectory(
+            indexDirectories.at(
+                currentIndexDirectory
+            )
+        );
+
+        ++currentIndexDirectory;
+
+
+        if (currentIndexDirectory <
+            indexDirectories.size())
+        {
+            indexTimer->start(0);
+        }
+    }
+
+
+    if (currentIndexDirectory >=
+        indexDirectories.size())
+    {
+        indexTimer->stop();
+
+
+        // -----------------------------------------------------
+        // REMOVE DUPLICATES
+        // -----------------------------------------------------
+
+        QVector<AppResult> unique;
+
+        unique.reserve(
+            applications.size()
+        );
+
+
+        for (const AppResult &app :
+             applications)
+        {
+            bool duplicate = false;
+
+
+            for (const AppResult &existing :
+                 unique)
+            {
+                if (
+                    existing.path.compare(
+                        app.path,
+                        Qt::CaseInsensitive
+                    ) == 0
+                )
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+
+
+            if (!duplicate)
+            {
+                unique.append(
+                    app
+                );
+            }
+        }
+
+
+        applications =
+            unique;
+
+
+        // -----------------------------------------------------
+        // SORT
+        // -----------------------------------------------------
+
+        std::sort(
+            applications.begin(),
+            applications.end(),
+            [](const AppResult &a,
+               const AppResult &b)
+            {
+                return a.searchName <
+                       b.searchName;
+            }
+        );
+
+
+        // -----------------------------------------------------
+        // REFRESH SEARCH
+        // -----------------------------------------------------
+
+        if (!searchBox->text()
+                 .trimmed()
+                 .isEmpty())
+        {
+            searchApplications(
+                searchBox->text()
+            );
+        }
+    }
+}
+
+
+// =========================================================
+// SEARCH TEXT CHANGED
+// =========================================================
+
+void MainWindow::onSearchTextChanged(
     const QString &text
 )
 {
-    QString query =
-        text.trimmed();
+    searchApplications(
+        text
+    );
+}
 
-    /*
-     * ========================================================
-     * TEMPORARY TEST RESULTS
-     * ========================================================
-     *
-     * These are ONLY here to test the animation.
-     *
-     * We will DELETE this section when we build the real
-     * search engine.
-     *
-     * There are no permanent/fake suggestions anymore.
-     */
+
+// =========================================================
+// SEARCH APPLICATIONS
+// =========================================================
+
+void MainWindow::searchApplications(
+    const QString &query
+)
+{
+    if (!resultsList ||
+        !emptyLabel)
+    {
+        return;
+    }
+
 
     resultsList->clear();
 
-    if (query.isEmpty())
-    {
-        resultsList->setVisible(false);
 
-        updateWindowSize(0);
+    const QString trimmed =
+        query.trimmed();
+
+
+    // ---------------------------------------------------------
+    // EMPTY SEARCH
+    // ---------------------------------------------------------
+
+    if (trimmed.isEmpty())
+    {
+        resultsList->setVisible(
+            false
+        );
+
+        emptyLabel->setVisible(
+            false
+        );
+
+        updateWindowHeight(
+            0
+        );
+
+        return;
+    }
+
+
+    const QString lowerQuery =
+        trimmed.toLower();
+
+
+    QVector<AppResult> matches;
+
+
+    // ---------------------------------------------------------
+    // SCORE ALL APPLICATIONS
+    // ---------------------------------------------------------
+
+    struct ScoredResult
+    {
+        AppResult app;
+        int score;
+    };
+
+
+    QVector<ScoredResult> scored;
+
+
+    for (const AppResult &app :
+         applications)
+    {
+        const int score =
+            calculateScore(
+                app,
+                lowerQuery
+            );
+
+
+        if (score > 0)
+        {
+            ScoredResult result;
+
+            result.app = app;
+            result.score = score;
+
+            scored.append(
+                result
+            );
+        }
+    }
+
+
+    // ---------------------------------------------------------
+    // SORT BY SCORE
+    // ---------------------------------------------------------
+
+    std::sort(
+        scored.begin(),
+        scored.end(),
+        [](const ScoredResult &a,
+           const ScoredResult &b)
+        {
+            if (a.score != b.score)
+            {
+                return a.score >
+                       b.score;
+            }
+
+            return a.app.searchName <
+                   b.app.searchName;
+        }
+    );
+
+
+    // ---------------------------------------------------------
+    // LIMIT RESULTS
+    // ---------------------------------------------------------
+
+    const int count =
+        qMin(
+            maximumResults,
+            scored.size()
+        );
+
+
+    // ---------------------------------------------------------
+    // NOTHING FOUND
+    // ---------------------------------------------------------
+
+    if (count == 0)
+    {
+        resultsList->setVisible(
+            false
+        );
+
+        emptyLabel->setText(
+            "No results"
+        );
+
+        emptyLabel->setVisible(
+            true
+        );
+
+        updateWindowHeight(
+            0
+        );
 
         return;
     }
 
 
     // ---------------------------------------------------------
-    // Temporary results for animation testing
+    // SHOW RESULTS
     // ---------------------------------------------------------
 
-    if (query.contains(
-            "chrome",
-            Qt::CaseInsensitive))
-    {
-        resultsList->addItem(
-            "Chrome"
-        );
+    emptyLabel->setVisible(
+        false
+    );
 
-        resultsList->addItem(
-            "Open Chrome"
-        );
+    resultsList->setVisible(
+        true
+    );
 
-        resultsList->addItem(
-            "Chrome settings"
-        );
-    }
-    else
+
+    for (int i = 0;
+         i < count;
+         ++i)
     {
-        /*
-         * For any other search term we currently show
-         * one test result.
-         *
-         * This will later be replaced by the real search
-         * engine.
-         */
-        resultsList->addItem(
-            "Searching for \"" + query + "\"..."
+        addApplicationResult(
+            scored.at(i).app
         );
     }
 
 
     // ---------------------------------------------------------
-    // Show results
+    // SELECT FIRST
     // ---------------------------------------------------------
 
-    int count =
-        resultsList->count();
-
-    if (count > 0)
+    if (resultsList->count() > 0)
     {
-        resultsList->setVisible(true);
-
-        /*
-         * Give the list exactly enough height for its
-         * results.
-         */
-        int listHeight =
-            count * resultRowHeight + 4;
-
-        resultsList->setFixedHeight(
-            listHeight
+        resultsList->setCurrentRow(
+            0
         );
     }
 
-    updateWindowSize(count);
+
+    updateWindowHeight(
+        count
+    );
 }
 
 
-// =============================================================
-// WINDOW SIZE
-// =============================================================
+// =========================================================
+// SEARCH SCORE
+// =========================================================
 
-void MainWindow::updateWindowSize(
+int MainWindow::calculateScore(
+    const AppResult &app,
+    const QString &query
+) const
+{
+    const QString name =
+        app.searchName;
+
+
+    if (name == query)
+    {
+        return 10000;
+    }
+
+
+    if (name.startsWith(query))
+    {
+        return 8500
+            - qMin(
+                name.length(),
+                200
+            );
+    }
+
+
+    // ---------------------------------------------------------
+    // WORD START MATCH
+    // ---------------------------------------------------------
+
+    int wordStartScore = 0;
+
+
+    for (int position = 0;
+         position < name.length();
+         ++position)
+    {
+        const bool wordStart =
+            position == 0 ||
+            name.at(position - 1).isSpace() ||
+            name.at(position - 1) == '-' ||
+            name.at(position - 1) == '_' ||
+            name.at(position - 1) == '.';
+
+
+        if (!wordStart)
+        {
+            continue;
+        }
+
+
+        if (
+            name.mid(
+                position,
+                query.length()
+            ) == query
+        )
+        {
+            wordStartScore =
+                6500
+                - qMin(
+                    position * 10,
+                    1000
+                );
+
+            break;
+        }
+    }
+
+
+    if (wordStartScore > 0)
+    {
+        return wordStartScore;
+    }
+
+
+    // ---------------------------------------------------------
+    // CONTAINS
+    // ---------------------------------------------------------
+
+    const int containsPosition =
+        name.indexOf(
+            query
+        );
+
+
+    if (containsPosition >= 0)
+    {
+        return 4000
+            - qMin(
+                containsPosition * 10,
+                1500
+            );
+    }
+
+
+    // ---------------------------------------------------------
+    // FUZZY MATCH
+    // ---------------------------------------------------------
+
+    int queryIndex = 0;
+
+    int consecutive = 0;
+
+    int fuzzyScore = 0;
+
+
+    for (
+        int i = 0;
+        i < name.length() &&
+        queryIndex < query.length();
+        ++i
+    )
+    {
+        if (
+            name.at(i) ==
+            query.at(queryIndex)
+        )
+        {
+            ++queryIndex;
+
+            ++consecutive;
+
+            fuzzyScore +=
+                300 +
+                consecutive * 25;
+        }
+        else
+        {
+            consecutive = 0;
+        }
+    }
+
+
+    if (queryIndex ==
+        query.length())
+    {
+        return 1000 +
+               qMax(
+                   0,
+                   fuzzyScore -
+                   name.length() * 3
+               );
+    }
+
+
+    return 0;
+}
+
+
+// =========================================================
+// ADD RESULT
+// =========================================================
+
+void MainWindow::addApplicationResult(
+    const AppResult &app
+)
+{
+    QListWidgetItem *item =
+        new QListWidgetItem();
+
+
+    // ---------------------------------------------------------
+    // ICON
+    // ---------------------------------------------------------
+
+    QFileIconProvider iconProvider;
+
+    QIcon icon =
+        iconProvider.icon(
+            QFileInfo(app.path)
+        );
+
+
+    if (!icon.isNull())
+    {
+        item->setIcon(
+            icon
+        );
+    }
+
+
+    // ---------------------------------------------------------
+    // NAME
+    // ---------------------------------------------------------
+
+    item->setText(
+        app.name
+    );
+
+
+    // ---------------------------------------------------------
+    // PATH
+    // ---------------------------------------------------------
+
+    item->setData(
+        Qt::UserRole,
+        app.path
+    );
+
+
+    // ---------------------------------------------------------
+    // SIZE
+    // ---------------------------------------------------------
+
+    item->setSizeHint(
+        QSize(
+            0,
+            52
+        )
+    );
+
+
+    resultsList->addItem(
+        item
+    );
+}
+
+
+// =========================================================
+// CLEAR RESULTS
+// =========================================================
+
+void MainWindow::clearResults()
+{
+    if (!resultsList)
+    {
+        return;
+    }
+
+    resultsList->clear();
+}
+
+
+// =========================================================
+// UPDATE WINDOW HEIGHT
+// =========================================================
+
+void MainWindow::updateWindowHeight(
     int resultCount
 )
 {
-    /*
-     * ---------------------------------------------------------
-     * IMPORTANT GEOMETRY
-     * ---------------------------------------------------------
-     *
-     * Top margin        = 14
-     * Search            = 56
-     * Gap               = 10
-     * Results           = resultCount * row height
-     * Bottom margin     = 14
-     *
-     * Therefore:
-     *
-     * Empty:
-     *
-     * 14 + 56 + 14 = 84
-     *
-     * Three results:
-     *
-     * 14 + 56 + 10 + 3*48 + 4 + 14
-     * = 242
-     *
-     * The TOP NEVER CHANGES.
-     */
+    int targetHeight =
+        compactHeight;
 
-    const int topMargin = 14;
-    const int bottomMargin = 14;
-    const int gap = 10;
 
-    int targetHeight;
-
-    if (resultCount <= 0)
+    if (resultCount > 0)
     {
-        targetHeight =
-            topMargin +
-            searchHeight +
-            bottomMargin;
-    }
-    else
-    {
-        int resultsHeight =
-            resultCount *
-            resultRowHeight +
-            4;
+        constexpr int rowHeight = 52;
+
+        constexpr int spacing = 4;
+
+
+        const int resultAreaHeight =
+            resultCount * rowHeight
+            +
+            (resultCount - 1) * spacing;
+
 
         targetHeight =
-            topMargin +
-            searchHeight +
-            gap +
-            resultsHeight +
-            bottomMargin;
+            compactHeight
+            +
+            resultAreaHeight
+            +
+            10;
     }
 
 
-    // ---------------------------------------------------------
-    // Keep the top-left position exactly where it is.
-    // ---------------------------------------------------------
+    targetHeight =
+        qBound(
+            compactHeight,
+            targetHeight,
+            520
+        );
 
-    QRect current =
+
+    animateWindowHeight(
+        targetHeight
+    );
+}
+
+
+// =========================================================
+// ANIMATE WINDOW HEIGHT
+// =========================================================
+
+void MainWindow::animateWindowHeight(
+    int targetHeight
+)
+{
+    if (!heightAnimation)
+    {
+        resize(
+            width(),
+            targetHeight
+        );
+
+        return;
+    }
+
+
+    const QRect current =
         geometry();
+
+
+    if (current.height() ==
+        targetHeight)
+    {
+        return;
+    }
+
+
+    heightAnimation->stop();
+
+
+    // Keep the window centered vertically
+    // while its height changes.
+
+    const int heightDifference =
+        targetHeight -
+        current.height();
+
 
     QRect target =
         current;
 
-    /*
-     * DO NOT change target.x()
-     * DO NOT change target.y()
-     *
-     * Only height changes.
-     */
-    target.setWidth(windowWidth);
 
-    target.setHeight(targetHeight);
+    target.setHeight(
+        targetHeight
+    );
 
 
-    animateToGeometry(target);
-}
+    target.moveTop(
+        current.top()
+        -
+        heightDifference / 2
+    );
 
 
-// =============================================================
-// ANIMATE GEOMETRY
-// =============================================================
-
-void MainWindow::animateToGeometry(
-    const QRect &target
-)
-{
-    QRect current =
-        geometry();
-
-    if (current == target)
-        return;
-
-    geometryAnimation->stop();
-
-    geometryAnimation->setStartValue(
+    heightAnimation->setStartValue(
         current
     );
 
-    geometryAnimation->setEndValue(
+    heightAnimation->setEndValue(
         target
     );
 
-    geometryAnimation->start();
+
+    heightAnimation->start();
 }
 
 
-// =============================================================
-// MOUSE DRAGGING
-// =============================================================
+// =========================================================
+// LAUNCH SELECTED RESULT
+// =========================================================
+
+void MainWindow::launchSelectedResult()
+{
+    if (!resultsList)
+    {
+        return;
+    }
+
+
+    QListWidgetItem *item =
+        resultsList->currentItem();
+
+
+    if (!item)
+    {
+        return;
+    }
+
+
+    const QString path =
+        item->data(
+            Qt::UserRole
+        ).toString();
+
+
+    if (path.isEmpty())
+    {
+        return;
+    }
+
+
+    launchApplication(
+        path
+    );
+}
+
+
+// =========================================================
+// LAUNCH APPLICATION
+// =========================================================
+
+void MainWindow::launchApplication(
+    const QString &path
+)
+{
+#ifdef Q_OS_WIN
+
+    const std::wstring widePath =
+        path.toStdWString();
+
+
+    const HINSTANCE result =
+        ShellExecuteW(
+            nullptr,
+            L"open",
+            widePath.c_str(),
+            nullptr,
+            nullptr,
+            SW_SHOWNORMAL
+        );
+
+
+    // Only close Spotlight if Windows
+    // successfully launched the target.
+
+    if (
+        reinterpret_cast<INT_PTR>(
+            result
+        ) > 32
+    )
+    {
+        close();
+    }
+
+#else
+
+    Q_UNUSED(path);
+
+#endif
+}
+
+
+// =========================================================
+// MOUSE PRESS
+// =========================================================
 
 void MainWindow::mousePressEvent(
     QMouseEvent *event
@@ -484,19 +1218,29 @@ void MainWindow::mousePressEvent(
     {
         dragging = true;
 
+
         dragOffset =
-            event->globalPosition().toPoint()
+            event->globalPosition()
+                .toPoint()
             -
             frameGeometry().topLeft();
+
 
         event->accept();
 
         return;
     }
 
-    QMainWindow::mousePressEvent(event);
+
+    QMainWindow::mousePressEvent(
+        event
+    );
 }
 
+
+// =========================================================
+// MOUSE MOVE
+// =========================================================
 
 void MainWindow::mouseMoveEvent(
     QMouseEvent *event
@@ -504,32 +1248,36 @@ void MainWindow::mouseMoveEvent(
 {
     if (
         dragging &&
-        (event->buttons() &
-         Qt::LeftButton)
+        (
+            event->buttons()
+            &
+            Qt::LeftButton
+        )
     )
     {
-        QPoint newPosition =
-            event->globalPosition().toPoint()
+        move(
+            event->globalPosition()
+                .toPoint()
             -
-            dragOffset;
-
-        move(newPosition);
-
-        /*
-         * Keep the compact position synchronized.
-         */
-        compactGeometry.moveTopLeft(
-            newPosition
+            dragOffset
         );
+
 
         event->accept();
 
         return;
     }
 
-    QMainWindow::mouseMoveEvent(event);
+
+    QMainWindow::mouseMoveEvent(
+        event
+    );
 }
 
+
+// =========================================================
+// MOUSE RELEASE
+// =========================================================
 
 void MainWindow::mouseReleaseEvent(
     QMouseEvent *event
@@ -547,18 +1295,25 @@ void MainWindow::mouseReleaseEvent(
         return;
     }
 
-    QMainWindow::mouseReleaseEvent(event);
+
+    QMainWindow::mouseReleaseEvent(
+        event
+    );
 }
 
 
-// =============================================================
+// =========================================================
 // KEYBOARD
-// =============================================================
+// =========================================================
 
 void MainWindow::keyPressEvent(
     QKeyEvent *event
 )
 {
+    // ---------------------------------------------------------
+    // ESCAPE
+    // ---------------------------------------------------------
+
     if (
         event->key() ==
         Qt::Key_Escape
@@ -569,5 +1324,96 @@ void MainWindow::keyPressEvent(
         return;
     }
 
-    QMainWindow::keyPressEvent(event);
+
+    // ---------------------------------------------------------
+    // DOWN
+    // ---------------------------------------------------------
+
+    if (
+        event->key() ==
+        Qt::Key_Down
+    )
+    {
+        if (
+            resultsList->isVisible() &&
+            resultsList->count() > 0
+        )
+        {
+            const int row =
+                resultsList->currentRow();
+
+
+            if (
+                row <
+                resultsList->count() - 1
+            )
+            {
+                resultsList->setCurrentRow(
+                    row + 1
+                );
+            }
+
+
+            return;
+        }
+    }
+
+
+    // ---------------------------------------------------------
+    // UP
+    // ---------------------------------------------------------
+
+    if (
+        event->key() ==
+        Qt::Key_Up
+    )
+    {
+        if (
+            resultsList->isVisible() &&
+            resultsList->count() > 0
+        )
+        {
+            const int row =
+                resultsList->currentRow();
+
+
+            if (row > 0)
+            {
+                resultsList->setCurrentRow(
+                    row - 1
+                );
+            }
+
+
+            return;
+        }
+    }
+
+
+    // ---------------------------------------------------------
+    // ENTER
+    // ---------------------------------------------------------
+
+    if (
+        event->key() ==
+        Qt::Key_Return ||
+        event->key() ==
+        Qt::Key_Enter
+    )
+    {
+        if (
+            resultsList->isVisible() &&
+            resultsList->count() > 0
+        )
+        {
+            launchSelectedResult();
+
+            return;
+        }
+    }
+
+
+    QMainWindow::keyPressEvent(
+        event
+    );
 }
